@@ -30,6 +30,10 @@ function keyboard_client(host::IPAddr=IPv4(0), port=4444; v_step = 1.0, s_step =
     shutdown = false
     @info "Press 'q' at any time to terminate vehicle. Press 's' to shutdown simulator server."
     while persist && !shutdown && isopen(socket)
+        # print state_msg
+        #println("state_msg", state_msg)
+        @info "state_msg: $state_msg"
+
         key = get_c()
         if key == 'q'
             # terminate vehicle
