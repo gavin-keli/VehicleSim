@@ -25,7 +25,9 @@ include("control.jl")
 include("sink.jl")
 include("measurements.jl")
 include("map.jl")
+include("project.jl")
+#include("example_project.jl")
 
-export server, shutdown!, keyboard_client
+export server, shutdown!, keyboard_client, example_client, project_client
 
 end

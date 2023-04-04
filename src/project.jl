@@ -1,11 +1,28 @@
+struct SimpleVehicleState
+    p1::Float64
+    p2::Float64
+    θ::Float64
+    v::Float64
+    l::Float64
+    w::Float64
+    h::Float64
+end
+
+struct FullVehicleState
+    position::SVector{3, Float64}
+    velocity::SVector{3, Float64}
+    orientation::SVector{3, Float64}
+    angular_vel::SVector{3, Float64}
+end
+
 struct MyLocalizationType
-    field1::Int
-    field2::Float64
+    last_update::Float64
+    x::FullVehicleState
 end
 
 struct MyPerceptionType
-    field1::Int1
-    field2::Float64
+    last_update::Float64
+    x::Vector{SimpleVehicleState}
 end
 
 function localize(gps_channel, imu_channel, localization_state_channel)
@@ -59,26 +76,38 @@ function decision_making(localization_state_channel,
         target_road_segment_id, 
         socket)
     # do some setup
-    while true
-        latest_localization_state = fetch(localization_state_channel)
-        latest_perception_state = fetch(perception_state_channel)
+    #while true
+    for i in 1:200
+        println(i)
+        #latest_localization_state = fetch(localization_state_channel)
+        #latest_perception_state = fetch(perception_state_channel)
 
         # figure out what to do ... setup motion planning problem etc
-        steering_angle = 0.0
-        target_vel = 0.0
-        cmd = VehicleCommand(steering_angle, target_vel, true)
-        serialize(socket, cmd)
+        if i != 200
+            steering_angle = 0.0
+            target_vel = 0.5
+            cmd = VehicleCommand(steering_angle, target_vel, true)
+            serialize(socket, cmd)
+        else
+            steering_angle = 0.0
+            target_vel = 0.0
+            cmd = VehicleCommand(steering_angle, target_vel, false)
+            serialize(socket, cmd)
+            close(socket)
+        end
     end
 end
 
-function isfull(ch:Channel)
+function isfull(ch::Channel)
     length(ch.data) ≥ ch.sz_max
 end
 
 
-function my_client(host::IPAddr=IPv4(0), port=4444)
+function project_client(host::IPAddr=IPv4(0), port=4444)
     socket = Sockets.connect(host, port)
     map_segments = training_map()
+    msg = deserialize(socket) # Visualization info
+    @info msg
 
     gps_channel = Channel{GPSMeasurement}(32)
     imu_channel = Channel{IMUMeasurement}(32)
@@ -93,8 +122,11 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
 
     @async while true
         measurement_msg = deserialize(socket)
-        target_map_segment = meas.target_segment
-        ego_vehicle_id = meas.vehicle_id
+        target_map_segment = measurement_msg.target_segment
+        ego_vehicle_id = measurement_msg.vehicle_id
+
+        @info measurement_msg
+
         for meas in measurement_msg.measurements
             if meas isa GPSMeasurement
                 !isfull(gps_channel) && put!(gps_channel, meas)
@@ -108,7 +140,17 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
         end
     end
 
-    @async localize(gps_channel, imu_channel, localization_state_channel)
-    @async perception(cam_channel, localization_state_channel, perception_state_channel)
-    @async decision_making(localization_state_channel, perception_state_channel, map, socket)
+    #@async localize(gps_channel, imu_channel, localization_state_channel)
+    #@async perception(cam_channel, localization_state_channel, perception_state_channel)
+    #@async decision_making(localization_state_channel, perception_state_channel, map, 78, socket)
+    
+    decision_making(localization_state_channel, perception_state_channel, map, 78, socket)
+
+    #=
+    while isopen(socket)
+        cmd = VehicleCommand(0.0, 1.0, true)
+        serialize(socket, cmd)
+    end
+    =#
+
 end
