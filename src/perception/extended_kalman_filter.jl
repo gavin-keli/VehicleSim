@@ -5,10 +5,23 @@ using Random
 """
 Unicycle model
 """
-function f(x, u, Δ)
+
+# 7-dims vector x = [p1, p2, v, θ, l, w, h]
+# REMOVE 2-dims vector u = [a, w]
+# 8-dims vector z = [y1-4, y5-8] two camera views
+
+# TODO change Function jac_fx, h, jac_hx, REMOVE Function jac_fu
+
+function f(x, Δ)
+    p1 = x[1]
+    p2 = x[2]
     v = x[3]
     θ = x[4]
-    x + Δ * [v*cos(θ), v*sin(θ), u[1], u[2]]
+    l = x[5]
+    w = x[6]
+    h = x[7]
+
+    [p1+Δ*v*cos(θ), p2+Δ*v*sin(θ), v, θ, l, w, h]
 end
 
 
@@ -22,16 +35,6 @@ function jac_fx(x, u, Δ)
      0 1.0 Δ*sin(θ) Δ*v*cos(θ);
      0 0 1.0 0;
      0 0 0 1]
-end
-
-"""
-Jacobian of f with respect to u, evaluated at x,u,Δ.
-"""
-function jac_fu(x, u, Δ)
-    [0 0;
-     0 0;
-     Δ 0;
-     0 Δ]
 end
 
 """
@@ -148,4 +151,12 @@ function filter(; μ=zeros(4), Σ=Diagonal([5,5,3,1.0]), x0=zeros(4), num_steps=
     end
 
     (; μs, Σs)
+end
+
+"""
+Inputs are 4 points bounding_boxes (2D) / 8-dims vector z = [y1-4, y5-8] two camera views
+Outputs are 8 points (3D) maybe
+"""
+function  inverse_cameras(vehicles, state_channels, cam_channels; max_rate=10.0, focal_len = 0.01, pixel_len = 0.001, image_width = 640, image_height = 480)
+    
 end

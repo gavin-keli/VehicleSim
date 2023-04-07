@@ -64,6 +64,12 @@ struct MeasurementMessage
     measurements::Vector{Measurement}
 end
 
+"""
+Some References about Quaternion and Spatial Rotations
+https://www.youtube.com/watch?v=d4EgbgTm0Bg (Long Version)
+https://www.youtube.com/watch?v=zjMuIxRvygQ (Short Version)
+https://danceswithcode.net/engineeringnotes/quaternions/quaternions.html (How to convert Quaternion to Rotation Matrix and Rotation to Quaternion)
+"""
 function Rot_from_quat(q)
     qw = q[1]
     qx = q[2]
@@ -75,6 +81,12 @@ function Rot_from_quat(q)
          2(qx*qz-qw*qy) 2(qw*qx+qy*qz) qw^2-qx^2-qy^2+qz^2]
 end
 
+"""
+Some References about 3D Rotations 
+https://austinmorlan.com/posts/rotation_matrices/
+https://towardsdatascience.com/the-one-stop-guide-for-transformation-matrices-cea8f609bdb1
+https://harry7557558.github.io/tools/matrixv.html
+"""
 function get_rotated_camera_transform()
     R = [0 0 1.;
          -1 0 0;
@@ -108,6 +120,9 @@ function get_imu_transform()
     T = [R_imu_to_body t_imu_to_body]
 end
 
+"""
+EGO frame to MAP frame ?
+"""
 function get_body_transform(quat, loc)
     R = Rot_from_quat(quat)
     [R loc]
@@ -122,7 +137,9 @@ end
 """
 T = T1 * T2
 
-i.e. apply T2 then T1
+i.e. apply T2 then T1 (From right to left)
+
+reference: https://www.mathsisfun.com/algebra/matrix-transform.html
 """
 function multiply_transforms(T1, T2)
     T1f = [T1; [0 0 0 1.]] 
@@ -136,7 +153,7 @@ function gps(vehicle, state_channel, meas_channel; sqrt_meas_cov = Diagonal([1.0
     min_Δ = 1.0/max_rate
     t = time()
     T = get_gps_transform()
-    gps_loc_body = T*[zeros(3); 1.0]
+    gps_loc_body = T*[zeros(3); 1.0] # [-3.0; 1.0; 2.6]
     while true
         sleep(0.0001)
         state = fetch(state_channel)
@@ -145,10 +162,10 @@ function gps(vehicle, state_channel, meas_channel; sqrt_meas_cov = Diagonal([1.0
             t = tnow
             xyz_body = state.q[5:7]
             q_body = state.q[1:4]
-            Tbody = get_body_transform(q_body, xyz_body)
-            xyz_gps = Tbody * [gps_loc_body; 1]
-            meas = xyz_gps[1:2] + sqrt_meas_cov*randn(2)
-            gps_meas = GPSMeasurement(t, meas[1], meas[2])
+            Tbody = get_body_transform(q_body, xyz_body) # for P(gk|xk)
+            xyz_gps = Tbody * [gps_loc_body; 1] # for P(gk|xk)
+            meas = xyz_gps[1:2] + sqrt_meas_cov*randn(2) # for P(gk|xk)
+            gps_meas = GPSMeasurement(t, meas[1], meas[2]) # for P(gk|xk)
             put!(meas_channel, gps_meas)
         end
     end
@@ -171,8 +188,8 @@ function imu(vehicle, state_channel, meas_channel; sqrt_meas_cov = Diagonal([0.0
             v_body = state.v[4:6]
             ω_body = state.v[1:3]
 
-            ω_imu = R * ω_body
-            v_imu = R * v_body + p × ω_imu
+            ω_imu = R * ω_body # for P(mk|xk)
+            v_imu = R * v_body + p × ω_imu # for P(mk|xk)
 
             meas = [v_imu; ω_imu] + sqrt_meas_cov*randn(6)
 
@@ -182,6 +199,11 @@ function imu(vehicle, state_channel, meas_channel; sqrt_meas_cov = Diagonal([0.0
     end
 end
 
+"""
+Generate 8 points representing the edge of a vehicle (3D)
+
+World/Map view
+"""
 function get_3d_bbox_corners(state, box_size)
     quat = state.q[1:4]
     xyz = state.q[5:7]
@@ -219,7 +241,7 @@ function cameras(vehicles, state_channels, cam_channels; max_rate=10.0, focal_le
     while true
         sleep(0.0001)
         states = [fetch(state_channels[id]) for id in 1:num_vehicles]
-        corners_body = [get_3d_bbox_corners(state, vehicle_size) for state in states]
+        corners_body = [get_3d_bbox_corners(state, vehicle_size) for state in states] # 8 points (3D); ALL vehicle's shapes (3D) World/Map view (inputs)
         tnow = time()
         if tnow - t > min_Δ
             t = tnow
@@ -231,11 +253,13 @@ function cameras(vehicles, state_channels, cam_channels; max_rate=10.0, focal_le
                 T_world_camrot2 = multiply_transforms(T_world_body, T_body_camrot2)
                 T_camrot1_world = invert_transform(T_world_camrot1)
                 T_camrot2_world = invert_transform(T_world_camrot2)
+
+                # other vehicle corners (3D) 8 points World/Map view to camera views (2D) 4 points
                 for (camera_id, transform) in zip((1,2), (T_camrot1_world, T_camrot2_world))
                     
                     for j = 1:num_vehicles
                         j == i && continue
-                        other_vehicle_corners = [transform * [pt;1] for pt in corners_body[j]]
+                        other_vehicle_corners = [transform * [pt;1] for pt in corners_body[j]] # 8 points (3D) but on camera views
                         visible = false
 
                         left = image_width/2
@@ -253,12 +277,13 @@ function cameras(vehicles, state_channels, cam_channels; max_rate=10.0, focal_le
                             right = max(right, px)
                             top = min(top, py)
                             bot = max(bot, py)
+                            # pick 4 points out of 8, still 3D on camera views. pz = focal_len
                         end
                         if top ≈ bot || left ≈ right || top > bot || left > right
                             # out of frame
                             continue
                         else 
-                            top = convert_to_pixel(image_height, pixel_len, top)
+                            top = convert_to_pixel(image_height, pixel_len, top) # top 0.00924121388699952 => 251
                             bot = convert_to_pixel(image_height, pixel_len, bot)
                             left = convert_to_pixel(image_width, pixel_len, left)
                             top = convert_to_pixel(image_width, pixel_len, right)

@@ -62,6 +62,15 @@ function perception(cam_meas_channel, localization_state_channel, perception_sta
         
         # process bounding boxes / run ekf / do what you think is good
 
+        # Test 1 (1 vehicle, 1 EGO)
+        # run ekf when there are bounding_boxes in the lstest_cam_meas_channel
+        # end ekf when no bounding_boxes in the cam_meas_channel
+        # CALL EKF Here
+        
+        #while length(fetch(fresh_cam_meas).bounding_boxes) != 0
+        #    filter()            
+        #end
+
         perception_state = MyPerceptionType(0,0.0)
         if isready(perception_state_channel)
             take!(perception_state_channel)
@@ -77,13 +86,13 @@ function decision_making(localization_state_channel,
         socket)
     # do some setup
     #while true
-    for i in 1:200
+    for i in 1:300
         println(i)
         #latest_localization_state = fetch(localization_state_channel)
         #latest_perception_state = fetch(perception_state_channel)
 
         # figure out what to do ... setup motion planning problem etc
-        if i != 200
+        if i != 300
             steering_angle = 0.0
             target_vel = 0.5
             cmd = VehicleCommand(steering_angle, target_vel, true)
