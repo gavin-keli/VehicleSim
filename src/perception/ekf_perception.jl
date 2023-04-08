@@ -96,10 +96,11 @@ function  h_preception(x)
     # convert to bounding_boxes points (2D)
     corners_body = get_3d_bbox_corners_perception(position, box_size) # 8 points for one other vehicle (3D)
 
-
+    # camera len x axes -> z axes -> camera frame -> body frame -> world frame
+    
     T_body_cam1 = get_cam_transform(1) # camera1 camera -> body rotation
     T_body_cam2 = get_cam_transform(2) # camera2 camera -> body rotation
-    T_cam_camrot = get_rotated_camera_transform() # camera len face z axes -> face x axes
+    T_cam_camrot = get_rotated_camera_transform() # camera len face x axes -> face z axes
 
     T_body_camrot1 = multiply_transforms(T_body_cam1, T_cam_camrot) # combine two transform together
     T_body_camrot2 = multiply_transforms(T_body_cam2, T_cam_camrot) # same above
