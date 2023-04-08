@@ -82,6 +82,32 @@ function Rot_from_quat(q)
 end
 
 """
+ Can be used as process model for EKF
+ which estimates xₖ = [position; quaternion; velocity; angular_vel]
+ We haven't discussed quaternions in class much, but interfacing with GPS/IMU
+ will be much easier using this representation, which is used internally by the simulator.
+ """
+function rigid_body_dynamics(position, quaternion, velocity, angular_vel, Δt)
+    r = angular_vel
+    mag = norm(r)
+
+    sᵣ = cos(mag*Δt / 2.0)
+    vᵣ = sin(mag*Δt / 2.0) * r/mag
+
+    sₙ = quaternion[1]
+    vₙ = quaternion[2:4]
+
+    s = sₙ*sᵣ - vₙ'*vᵣ
+    v = sₙ*vᵣ+sᵣ*vₙ+vₙ×vᵣ
+
+    new_position = position + Δt * velocity
+    new_quaternion = [s; v]
+    new_velocity = velocity
+    new_angular_vel = angular_vel
+    return [new_position; new_quaternion; new_velocity; new_angular_vel]
+end
+
+"""
 Some References about 3D Rotations 
 https://austinmorlan.com/posts/rotation_matrices/
 https://towardsdatascience.com/the-one-stop-guide-for-transformation-matrices-cea8f609bdb1
@@ -121,7 +147,7 @@ function get_imu_transform()
 end
 
 """
-EGO frame to MAP frame ?
+EGO frame to world frame
 """
 function get_body_transform(quat, loc)
     R = Rot_from_quat(quat)

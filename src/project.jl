@@ -52,13 +52,28 @@ end
 function perception(cam_meas_channel, localization_state_channel, perception_state_channel)
     # set up stuff
     while true
+        # meas can be considered as Zk
         fresh_cam_meas = []
         while isready(cam_meas_channel)
             meas = take!(cam_meas_channel)
             push!(fresh_cam_meas, meas)
         end
 
+        # an example of meas in the fresh_cam_meas
+        # VehicleSim.CameraMeasurement(1.680665593489583e9, 1, 0.01, 0.001, 640, 480, SVector{4, Int64}[a,b,c,d])
+
+
+
         latest_localization_state = fetch(localization_state_channel)
+        # an example of latest_localization_state
+        # MyLocalizationType(1.6666, FullVehicleState([1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0], [4.0, 4.0, 4.0]))
+        
+        # here are some info about EGO vehicle, those can be used to decide the Xk/X0 of other vehicles
+        position = latest_localization_state.x.position
+        velocity = latest_localization_state.x.velocity
+        orientation = latest_localization_state.x.orientation
+        angular_vel = latest_localization_state.x.angular_vel
+
         
         # process bounding boxes / run ekf / do what you think is good
 
@@ -67,11 +82,13 @@ function perception(cam_meas_channel, localization_state_channel, perception_sta
         # end ekf when no bounding_boxes in the cam_meas_channel
         # CALL EKF Here
         
-        #while length(fetch(fresh_cam_meas).bounding_boxes) != 0
-        #    filter()            
-        #end
+        while length(fetch(fresh_cam_meas).bounding_boxes) != 0
+            (; Xk, Σs) = ekf_perception()            
+        end
 
-        perception_state = MyPerceptionType(0,0.0)
+        t = time()
+        perception_state = MyPerceptionType(t,[Xk])
+
         if isready(perception_state_channel)
             take!(perception_state_channel)
         end
@@ -149,8 +166,8 @@ function project_client(host::IPAddr=IPv4(0), port=4444)
         end
     end
 
-    #@async localize(gps_channel, imu_channel, localization_state_channel)
-    #@async perception(cam_channel, localization_state_channel, perception_state_channel)
+    @async localize(gps_channel, imu_channel, localization_state_channel)
+    @async perception(cam_channel, localization_state_channel, perception_state_channel)
     #@async decision_making(localization_state_channel, perception_state_channel, map, 78, socket)
     
     decision_making(localization_state_channel, perception_state_channel, map, 78, socket)
