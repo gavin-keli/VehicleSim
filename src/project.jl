@@ -11,7 +11,7 @@ end
 struct FullVehicleState
     position::SVector{3, Float64}
     velocity::SVector{3, Float64}
-    orientation::SVector{3, Float64}
+    orientation::SVector{4, Float64} # still quat
     angular_vel::SVector{3, Float64}
 end
 

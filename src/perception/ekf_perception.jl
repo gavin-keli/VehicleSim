@@ -1,6 +1,7 @@
-using Infiltrator
 using LinearAlgebra
 using Random
+using Rotations
+using StaticArrays
 
 include("../measurements.jl")
 
@@ -68,12 +69,13 @@ function jac_fx(x, u, Δ)
 end
 
 """
-P(Zk|Xk)
+P(Zk|Xk,X_ego)
 
-Inputs are 7-dims vector x = [p1, p2, v, θ, l, w, h]
+Inputs are 7-dims vector Xk = [p1, p2, v, θ, l, w, h]
+            6-dims vector X_ego = [p1, p2, p3, r, p, y]
 Outputs are 4 points bounding_boxes (2D) / 8-dims vector z = [[y1-4], [y5-8]] two camera views
 """
-function  h_preception(x)
+function  h_preception(x, x_ego)
     # here p1 and p2 are the center of a vehicle (not the GPS module location)
     p1 = x[1]
     p2 = x[2]
@@ -86,6 +88,9 @@ function  h_preception(x)
     position = [p1, p2, p3]
     box_size = [l, w, h]
 
+    ego_position = x_ego[1:3]
+    ego_orientation = x_ego[4:7] # quat
+
     focal_len = 0.01
     pixel_len = 0.001
     image_width = 640
@@ -97,7 +102,7 @@ function  h_preception(x)
     corners_body = get_3d_bbox_corners_perception(position, box_size) # 8 points for one other vehicle (3D)
 
     # camera len x axes -> z axes -> camera frame -> body frame -> world frame
-    
+
     T_body_cam1 = get_cam_transform(1) # camera1 camera -> body rotation
     T_body_cam2 = get_cam_transform(2) # camera2 camera -> body rotation
     T_cam_camrot = get_rotated_camera_transform() # camera len face x axes -> face z axes
@@ -105,7 +110,7 @@ function  h_preception(x)
     T_body_camrot1 = multiply_transforms(T_body_cam1, T_cam_camrot) # combine two transform together
     T_body_camrot2 = multiply_transforms(T_body_cam2, T_cam_camrot) # same above
 
-    T_world_body = get_body_transform_perception(position) # other vehicle frame -> world frame
+    T_world_body = get_body_transform(ego_orientation, ego_position) # EGO frame -> world frame
     T_world_camrot1 = multiply_transforms(T_world_body, T_body_camrot1) # camera1 -> world
     T_world_camrot2 = multiply_transforms(T_world_body, T_body_camrot2) # camera2 -> world
     T_camrot1_world = invert_transform(T_world_camrot1) # world -> camera1
@@ -132,14 +137,18 @@ function  h_preception(x)
         end
 
         top = convert_to_pixel(image_height, pixel_len, top) # top 0.00924121388699952 => 251
+        push!(Z,top)
         bot = convert_to_pixel(image_height, pixel_len, bot)
+        push!(Z,bot)
         left = convert_to_pixel(image_width, pixel_len, left)
-        top = convert_to_pixel(image_width, pixel_len, right)
+        push!(Z,left)
+        right = convert_to_pixel(image_width, pixel_len, right)
+        push!(Z,right)
 
-        push!(Z, SVector(top, left, bot, right))
+        #push!(Z, (top, left, bot, right))
 
     end
-    return Z # Z = [[320,320,240,240],[321,321,241,241]] # first vector for camera1; second for camera2
+    return Z # Z = [320,320,240,240,321,321,241,241] # first vector for camera1; second for camera2
 end
 
 """

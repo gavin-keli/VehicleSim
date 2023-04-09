@@ -312,7 +312,7 @@ function cameras(vehicles, state_channels, cam_channels; max_rate=10.0, focal_le
                             top = convert_to_pixel(image_height, pixel_len, top) # top 0.00924121388699952 => 251
                             bot = convert_to_pixel(image_height, pixel_len, bot)
                             left = convert_to_pixel(image_width, pixel_len, left)
-                            top = convert_to_pixel(image_width, pixel_len, right)
+                            right = convert_to_pixel(image_width, pixel_len, right)
                             push!(bboxes, SVector(top, left, bot, right))
                         end
                     end
