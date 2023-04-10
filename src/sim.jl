@@ -30,7 +30,7 @@ function load_mechanism()
     (; urdf_path, chevy_base, chevy_joints)
 end
 
-function server(max_vehicles=2, 
+function server(max_vehicles=3, 
         port=4444; 
         full_state=true, 
         rng=MersenneTwister(1), 

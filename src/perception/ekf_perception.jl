@@ -36,7 +36,6 @@ Unicycle model
 """
 
 # 7-dims vector x = [p1, p2, v, θ, l, w, h]
-# REMOVE 2-dims vector u = [a, w]
 # 8-dims vector z = [y1-4, y5-8] two camera views
 
 # TODO change Function jac_fx, h, jac_hx, REMOVE Function jac_fu
@@ -59,7 +58,7 @@ end
 """
 Jacobian of f with respect to x, evaluated at x,u,Δ.
 """
-function jac_fx(x, u, Δ)
+function jac_fx(x, Δ)
     v = x[3]
     θ = x[4]
     [1.0 0 Δ*cos(θ) -Δ*v*sin(θ);
