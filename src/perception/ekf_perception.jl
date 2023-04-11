@@ -2,6 +2,7 @@ using LinearAlgebra
 using Random
 using Rotations
 using StaticArrays
+using ForwardDiff
 
 include("../measurements.jl")
 
@@ -61,10 +62,14 @@ Jacobian of f with respect to x, evaluated at x,u,Δ.
 function jac_fx(x, Δ)
     v = x[3]
     θ = x[4]
-    [1.0 0 Δ*cos(θ) -Δ*v*sin(θ);
-     0 1.0 Δ*sin(θ) Δ*v*cos(θ);
-     0 0 1.0 0;
-     0 0 0 1]
+
+    [1. 0. Δ*cos(θ) -Δ*v*sin(θ) 0. 0. 0.;
+     0. 1. Δ*sin(θ) -Δ*v*cos(θ) 0. 0. 0.;
+     0. 0. 1.       0.          0. 0. 0.;
+     0. 0. 0.       1.          0. 0. 0.;
+     0. 0. 0.       0.          1. 0. 0.;
+     0. 0. 0.       0.          0. 1. 0.;
+     0. 0. 0.       0.          0. 0. 1.]
 end
 
 """
