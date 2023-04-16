@@ -10,8 +10,8 @@ end
 
 struct FullVehicleState
     position::SVector{3, Float64}
-    velocity::SVector{3, Float64}
     orientation::SVector{4, Float64} # still quat
+    velocity::SVector{3, Float64}
     angular_vel::SVector{3, Float64}
 end
 
@@ -102,25 +102,82 @@ function decision_making(localization_state_channel,
         target_road_segment_id, 
         socket)
     # do some setup
-    #while true
-    for i in 1:300
-        println(i)
+    @info "into decision making"
+
+    t = time()
+    while true
+        #@info "into decision making while loop"
         #latest_localization_state = fetch(localization_state_channel)
         #latest_perception_state = fetch(perception_state_channel)
+        
+        gt_vehicle_states = []
+
+        if !isready(localization_state_channel)
+            continue
+        end
+
+        while isready(localization_state_channel)
+            meas = take!(localization_state_channel)
+            id = meas.vehicle_id
+            gt_vehicle_states = meas
+            @info "updated"
+        end
+
+        @info gt_vehicle_states
+
+        latest_true_ego_state = gt_vehicle_states
+
+        @info "latest_true_ego_state"
+        @info latest_true_ego_state
+
+        #if isready(localization_state_channel)
+        #    @info "localization_state_channel is ready"
+        #    latest_localization_state = take!(localization_state_channel)
+        #    @info "latest_localization_state"
+        #    @info latest_localization_state
+        #    sleep(1)
+        #else
+        #    @info "localization_state_channel is not ready"
+        #    sleep(1)
+        #    continue
+        #end
+        #latest_perception_state = take!(perception_state_channel)
+
+        # figure out the current segments
+        current_segment = 0
+        current_position = [0.0, 0.0]
+
+        #current_position = latest_localization_state.x.position[1:2]
+        #current_position = latest_localization_state.position[1:2]
+        if length(latest_true_ego_state) != 0
+            current_position = latest_true_ego_state.position[1:2]
+        end
+
+        @info "searching current segment"
+        @info current_position
+
+        # search all map_segments
+        for (key,value) in map
+            if if_in_segments(map[key], current_position)
+                current_segment = map[key]
+                #@info "current segment: $current_segment"
+            end
+        end
+
+        @info "found segment"
+        @info "current segment: $current_segment"
+        #@info "target segment: $map[target_road_segment_id]"
+
+        # path finding A_star
+        #res = a_star_solver(map, current_segment, map[target_road_segment_id])
+
+        @info "found path"
 
         # figure out what to do ... setup motion planning problem etc
-        if i != 300
-            steering_angle = 0.0
-            target_vel = 0.5
-            cmd = VehicleCommand(steering_angle, target_vel, true)
-            serialize(socket, cmd)
-        else
-            steering_angle = 0.0
-            target_vel = 0.0
-            cmd = VehicleCommand(steering_angle, target_vel, false)
-            serialize(socket, cmd)
-            close(socket)
-        end
+        steering_angle = current_segment.lane_boundaries[1].curvature
+        target_vel = 3.0
+        cmd = VehicleCommand(steering_angle, target_vel, true)
+        serialize(socket, cmd)
     end
 end
 
@@ -133,6 +190,8 @@ function project_client(host::IPAddr=IPv4(0), port=4444)
     socket = Sockets.connect(host, port)
     map_segments = training_map()
     msg = deserialize(socket) # Visualization info
+
+    @info "msg"
     @info msg
 
     gps_channel = Channel{GPSMeasurement}(32)
@@ -140,18 +199,37 @@ function project_client(host::IPAddr=IPv4(0), port=4444)
     cam_channel = Channel{CameraMeasurement}(32)
     gt_channel = Channel{GroundTruthMeasurement}(32)
 
-    localization_state_channel = Channel{MyLocalizationType}(1)
+    #localization_state_channel = Channel{MyLocalizationType}(1)
     perception_state_channel = Channel{MyPerceptionType}(1)
+
+    @info "channels created"
 
     target_map_segment = 0 # (not a valid segment, will be overwritten by message)
     ego_vehicle_id = 0 # (not a valid id, will be overwritten by message. This is used for discerning ground-truth messages)
 
     @async while true
-        measurement_msg = deserialize(socket)
+        # This while loop reads to the end of the socket stream (makes sure you
+        # are looking at the latest messages)
+        local measurement_msg
+
+        @info "into while loop"
+
+        #measurement_msg = deserialize(socket)
+
+        while true
+            @async eof(socket)
+            if bytesavailable(socket) > 0
+                measurement_msg = deserialize(socket)
+            else
+                break
+            end
+        end
+
         target_map_segment = measurement_msg.target_segment
         ego_vehicle_id = measurement_msg.vehicle_id
 
-        @info measurement_msg
+        @info "measurement_msg"
+        #@info measurement_msg
 
         for meas in measurement_msg.measurements
             if meas isa GPSMeasurement
@@ -164,19 +242,45 @@ function project_client(host::IPAddr=IPv4(0), port=4444)
                 !isfull(gt_channel) && put!(gt_channel, meas)
             end
         end
+
+        @info "put all channels"
+        @info fetch(gt_channel)
+
+        # put the gt_channel into two channels, localization_state_channel, and perception_state_channel 
+        # for test purpose only
+        # MyLocalizationType meas
+        #meas = take!(gt_channel)
+        #@info "gt_channel"
+        #@info meas
+
+        
+        #@info "capture gt_channel meas"
+        #localization_meas  = MyLocalizationType(meas.time, FullVehicleState(meas.position, #meas.velocity, meas.orientation, meas.angular_velocity))
+        #if isready(localization_state_channel)
+        #    @info "localization_state_channel is full"
+        #    take!(localization_state_channel)
+        #    put!(localization_state_channel, localization_meas)
+        #else
+        #    @info "insert localization_meas"
+        #    put!(localization_state_channel, localization_meas)
+        #end
+        # MyPerceptionType meas
+        perception_meas = MyPerceptionType(meas.time,[SimpleVehicleState(0.0, 0.0, 0.0, 0.0, 13.2, 5.7, 5.3)])
+        if !isfull(perception_state_channel)
+            put!(perception_state_channel, perception_meas)
+        end
+        @info "end of first loop"
     end
 
-    @async localize(gps_channel, imu_channel, localization_state_channel)
-    @async perception(cam_channel, localization_state_channel, perception_state_channel)
-    #@async decision_making(localization_state_channel, perception_state_channel, map, 78, socket)
-    
-    decision_making(localization_state_channel, perception_state_channel, map, 78, socket)
-
-    #=
-    while isopen(socket)
-        cmd = VehicleCommand(0.0, 1.0, true)
-        serialize(socket, cmd)
+    @async while true
+        decision_making(gt_channel, perception_state_channel, map_segments, target_map_segment, socket)
     end
-    =#
+
+    #@async localize(gps_channel, imu_channel, localization_state_channel)
+    #@async perception(cam_channel, localization_state_channel, perception_state_channel)
+    #@async decision_making(localization_state_channel, perception_state_channel, map_segments, target_map_segment, socket)
+    #@async decision_making(localization_state_channel, perception_state_channel, map_segments, target_map_segment, socket)
+    decision_making(gt_channel, perception_state_channel, map_segments, target_map_segment, socket)
+    #decision_making(localization_state_channel, perception_state_channel, map_segments, target_map_segment, socket)
 
 end

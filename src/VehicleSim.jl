@@ -16,6 +16,7 @@ using Sockets
 using Serialization
 using StaticArrays
 using DifferentialEquations
+using AStarSearch
 
 include("view_car.jl")
 include("objects.jl")
@@ -25,8 +26,9 @@ include("control.jl")
 include("sink.jl")
 include("measurements.jl")
 include("map.jl")
-include("project.jl")
-#include("example_project.jl")
+#include("project.jl")
+include("project2.jl")
+include("trajectory.jl")
 
 export server, shutdown!, keyboard_client, example_client, project_client
 
